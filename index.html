@@ -1,0 +1,2129 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>복셀 시크릿 베이스 - 백신 디펜스 3D</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700;900&display=swap');
+    
+    * {
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #050811;
+      font-family: 'Noto Sans KR', sans-serif;
+    }
+
+    .title-font {
+      font-family: 'Black Han Sans', sans-serif;
+      letter-spacing: 0.05em;
+    }
+
+    #canvas-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    .hud-glass {
+      background: rgba(10, 16, 32, 0.78);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+    }
+
+    .touch-btn {
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.06s ease, filter 0.06s ease;
+    }
+    .touch-btn:active {
+      transform: scale(0.92);
+      filter: brightness(1.25);
+    }
+
+    .key-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-weight: 800;
+      color: #38bdf8;
+      background: #0f172a;
+      border: 1px solid #0284c7;
+      border-radius: 5px;
+      box-shadow: 0 2px 0 #0369a1;
+    }
+
+    /* Floating combat text overlay */
+    #damage-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 25;
+    }
+
+    .floating-text {
+      position: absolute;
+      font-weight: 900;
+      font-size: 16px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      animation: floatUp 0.85s cubic-bezier(0.18, 0.89, 0.32, 1.28) forwards;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.9), 0 0 8px currentColor;
+    }
+
+    @keyframes floatUp {
+      0% { opacity: 0; transform: translate(-50%, 0) scale(0.6); }
+      20% { opacity: 1; transform: translate(-50%, -15px) scale(1.15); }
+      100% { opacity: 0; transform: translate(-50%, -55px) scale(0.9); }
+    }
+  </style>
+</head>
+<body class="text-white select-none">
+
+  <!-- 3D WebGL Canvas Layer -->
+  <div id="canvas-container"></div>
+  <div id="damage-container"></div>
+
+  <!-- HUD Interface Layer -->
+  <div id="hud" class="absolute inset-0 z-10 pointer-events-none flex flex-col justify-between p-3 sm:p-5 transition-opacity duration-300">
+    
+    <!-- Top HUD Row -->
+    <div class="w-full flex justify-between items-start gap-2">
+      
+      <!-- Player & Core Health Panel -->
+      <div class="hud-glass rounded-2xl p-2.5 sm:p-3.5 flex flex-col gap-1.5 min-w-[155px] sm:min-w-[220px]">
+        
+        <!-- Player HP -->
+        <div>
+          <div class="flex justify-between items-center text-[10px] sm:text-xs font-bold mb-1">
+            <span class="flex items-center gap-1 text-cyan-400">🛡️ 전투복 실드</span>
+            <span id="player-hp-txt" class="text-cyan-300 font-mono">100 / 100</span>
+          </div>
+          <div class="w-full h-2.5 bg-slate-900/90 rounded-full overflow-hidden border border-cyan-500/30">
+            <div id="player-hp-bar" class="h-full bg-gradient-to-r from-sky-500 to-cyan-300 rounded-full transition-all duration-150" style="width: 100%;"></div>
+          </div>
+        </div>
+
+        <!-- Secret Base Core HP -->
+        <div>
+          <div class="flex justify-between items-center text-[10px] sm:text-xs font-bold mb-1">
+            <span class="flex items-center gap-1 text-purple-400">🔮 기지 코어</span>
+            <span id="core-hp-txt" class="text-purple-300 font-mono">500 / 500</span>
+          </div>
+          <div class="w-full h-2 bg-slate-900/90 rounded-full overflow-hidden border border-purple-500/30">
+            <div id="core-hp-bar" class="h-full bg-gradient-to-r from-indigo-500 to-fuchsia-400 rounded-full transition-all duration-150" style="width: 100%;"></div>
+          </div>
+        </div>
+
+        <!-- Resources & Coins -->
+        <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-700/60 text-[11px] sm:text-xs font-bold">
+          <div class="flex items-center justify-between bg-slate-900/50 px-2 py-0.5 rounded-lg border border-amber-500/30">
+            <span class="text-amber-400">🧱 자원</span>
+            <span id="res-val" class="text-amber-300 font-mono text-xs sm:text-sm">15</span>
+          </div>
+          <div class="flex items-center justify-between bg-slate-900/50 px-2 py-0.5 rounded-lg border border-yellow-500/30">
+            <span class="text-yellow-400">🪙 코인</span>
+            <span id="coin-val" class="text-yellow-300 font-mono text-xs sm:text-sm">20</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center: Base Progress & Mission Wave -->
+      <div class="hud-glass rounded-2xl px-3 sm:px-6 py-2 sm:py-3 text-center flex flex-col items-center">
+        <span class="text-[10px] sm:text-xs text-amber-400 font-black tracking-wider uppercase">기지 완공 & 백신 구출 미션</span>
+        <div class="flex items-center gap-2 mt-1">
+          <div class="w-24 sm:w-44 bg-slate-900/90 h-3 rounded-full overflow-hidden border border-amber-400/40 p-[1px]">
+            <div id="base-progress-bar" class="h-full bg-gradient-to-r from-amber-400 via-orange-400 to-emerald-400 rounded-full transition-all duration-300" style="width: 0%;"></div>
+          </div>
+          <span id="base-progress-txt" class="font-mono font-black text-xs sm:text-sm text-emerald-300">0%</span>
+        </div>
+        <div class="flex items-center gap-2 sm:gap-4 mt-1 text-[11px] sm:text-xs font-bold">
+          <span class="text-cyan-300">웨이브 <span id="wave-val" class="text-amber-400 font-mono text-sm">1</span></span>
+          <span class="text-slate-500">|</span>
+          <span class="text-emerald-400">아군 시민: <span id="ally-val" class="text-white font-mono text-sm">0</span>명</span>
+        </div>
+      </div>
+
+      <!-- Right: Active Weapon & Dash Skill -->
+      <div class="hud-glass rounded-2xl p-2.5 sm:p-3.5 flex flex-col items-end min-w-[145px] sm:min-w-[190px]">
+        <div class="w-full flex justify-between items-center text-[10px] sm:text-xs font-bold text-slate-400 mb-0.5">
+          <span>장착 무기 [1/2]</span>
+          <span id="score-val" class="text-amber-300 font-mono font-bold">0</span>
+        </div>
+        <div id="cur-weapon-name" class="font-bold text-xs sm:text-sm text-cyan-300 bg-sky-950/70 border border-sky-400/40 px-2 py-0.5 rounded-lg w-full text-center">
+          🔫 플라즈마 블래스터
+        </div>
+
+        <div class="w-full flex justify-between items-center text-[10px] sm:text-xs font-bold text-amber-400 mt-2">
+          <span>대시 충격파 [R]</span>
+          <span id="dash-txt" class="font-mono text-cyan-300">READY</span>
+        </div>
+        <div class="w-full h-1.5 bg-slate-900/90 rounded-full overflow-hidden border border-amber-500/30">
+          <div id="dash-bar" class="h-full bg-gradient-to-r from-amber-400 to-yellow-200 rounded-full transition-all duration-75" style="width: 100%;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Buff indicators (Floating Left) -->
+    <div id="buff-row" class="flex flex-wrap gap-1.5 max-w-sm pointer-events-none mt-1"></div>
+
+    <!-- Desktop Key Guides (Hidden on smaller screens) -->
+    <div class="hidden md:flex justify-between items-center w-full max-w-4xl mx-auto pointer-events-auto">
+      <div class="hud-glass px-4 py-2 rounded-xl flex items-center gap-3 text-xs text-slate-300">
+        <div><span class="key-badge">WASD</span> 이동</div>
+        <div><span class="key-badge">Q</span><span class="key-badge">E</span> 회전</div>
+        <div><span class="key-badge">SPACE</span> 사격</div>
+        <div><span class="key-badge">1</span><span class="key-badge">2</span> 무기변경</div>
+        <div><span class="key-badge">T</span> 백신상점</div>
+        <div><span class="key-badge">B</span> 기지건설</div>
+        <div><span class="key-badge">R</span> 대시</div>
+      </div>
+      <div class="hud-glass px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span>스마트 자동 조준 가동</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Mobile Touch Controls Layout -->
+  <div id="mobile-ui" class="absolute inset-0 z-20 pointer-events-none select-none flex flex-col justify-end p-3 sm:p-5">
+    <div class="w-full flex items-end justify-between">
+      
+      <!-- Left: Analog Virtual Joystick -->
+      <div id="joy-zone" class="relative w-36 h-36 rounded-full bg-slate-900/50 border-2 border-cyan-400/30 backdrop-blur-md pointer-events-auto flex items-center justify-center touch-btn shadow-2xl">
+        <div id="joy-knob" class="w-14 h-14 rounded-full bg-gradient-to-tr from-cyan-600 to-sky-300 border-2 border-white shadow-lg shadow-cyan-500/50 pointer-events-none transform transition-transform duration-75"></div>
+      </div>
+
+      <!-- Right: Action Buttons Group -->
+      <div class="flex flex-col gap-2.5 pointer-events-auto items-end">
+        
+        <!-- Utility Action Row -->
+        <div class="flex gap-2">
+          <button id="btn-touch-swap" class="touch-btn px-3 h-10 rounded-xl bg-cyan-700/80 border border-cyan-300 text-white font-bold text-xs flex items-center gap-1 shadow-lg">
+            <span>🔄 무기교체</span>
+          </button>
+          <button id="btn-touch-shop" class="touch-btn px-3 h-10 rounded-xl bg-amber-600/80 border border-yellow-300 text-white font-bold text-xs flex items-center gap-1 shadow-lg">
+            <span>🛒 연구소 상점</span>
+          </button>
+        </div>
+
+        <!-- Rotation Fine-Tuning Controls -->
+        <div class="flex gap-2">
+          <button id="btn-turn-l" class="touch-btn w-12 h-10 rounded-xl bg-slate-800/80 border border-sky-400/50 text-cyan-300 font-bold text-lg flex items-center justify-center">
+            ↺
+          </button>
+          <button id="btn-turn-r" class="touch-btn w-12 h-10 rounded-xl bg-slate-800/80 border border-sky-400/50 text-cyan-300 font-bold text-lg flex items-center justify-center">
+            ↻
+          </button>
+        </div>
+
+        <!-- Main Action Buttons Row -->
+        <div class="flex items-center gap-2.5">
+          <!-- Build Button -->
+          <button id="btn-touch-build" class="touch-btn w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-600 to-yellow-500 text-slate-950 font-black text-xs flex flex-col items-center justify-center shadow-lg border border-amber-300">
+            <span class="text-base">🏗️</span>
+            <span>건설</span>
+          </button>
+          <!-- Dash Skill -->
+          <button id="btn-touch-dash" class="touch-btn w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-500 text-white font-black text-xs flex flex-col items-center justify-center shadow-lg border border-purple-300">
+            <span class="text-base">⚡</span>
+            <span>대시</span>
+          </button>
+          <!-- Attack / Fire Button -->
+          <button id="btn-touch-fire" class="touch-btn w-16 h-16 rounded-full bg-gradient-to-tr from-rose-500 to-pink-500 text-white font-black text-xs flex flex-col items-center justify-center shadow-xl border-2 border-white">
+            <span id="touch-fire-emoji" class="text-2xl">🔫</span>
+            <span id="touch-fire-txt">공격</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Build Structure Modal (B) -->
+  <div id="build-modal" class="hidden absolute inset-0 z-30 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 pointer-events-auto">
+    <div class="hud-glass max-w-md w-full p-5 rounded-3xl border border-amber-400/50 shadow-2xl">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="title-font text-lg text-amber-400 flex items-center gap-2">🏗️ 비밀기지 방어 구조물 건설</h3>
+        <button onclick="toggleBuildModal()" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-300 font-bold hover:bg-slate-700">✕</button>
+      </div>
+      <p class="text-xs text-slate-300 mb-4">채굴한 자원(🧱)으로 기지를 보호할 방어 시설을 설치하세요. 기지 완공률이 상승합니다!</p>
+
+      <div class="flex flex-col gap-2.5">
+        <!-- Wall -->
+        <div class="flex items-center justify-between p-3 rounded-2xl bg-slate-900/80 border border-slate-700">
+          <div class="flex items-center gap-3">
+            <span class="text-3xl">🧱</span>
+            <div>
+              <div class="text-sm font-bold text-white">강화 복셀 방벽 (Wall)</div>
+              <div class="text-[11px] text-slate-400">좀비의 진입을 막고 경로를 차단합니다.</div>
+            </div>
+          </div>
+          <button onclick="constructStructure('wall')" class="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-transform active:scale-95">
+            10 🧱 건설
+          </button>
+        </div>
+
+        <!-- Turret -->
+        <div class="flex items-center justify-between p-3 rounded-2xl bg-slate-900/80 border border-slate-700">
+          <div class="flex items-center gap-3">
+            <span class="text-3xl">⚡</span>
+            <div>
+              <div class="text-sm font-bold text-cyan-300">수호 레이저 터렛 (Turret)</div>
+              <div class="text-[11px] text-slate-400">접근하는 좀비를 향해 레이저를 자동 연사합니다.</div>
+            </div>
+          </div>
+          <button onclick="constructStructure('turret')" class="px-3 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-transform active:scale-95">
+            25 🧱 건설
+          </button>
+        </div>
+
+        <!-- Beacon -->
+        <div class="flex items-center justify-between p-3 rounded-2xl bg-slate-900/80 border border-slate-700">
+          <div class="flex items-center gap-3">
+            <span class="text-3xl">💖</span>
+            <div>
+              <div class="text-sm font-bold text-emerald-300">나노 힐링 비콘 (Healing)</div>
+              <div class="text-[11px] text-slate-400">플레이어, 시민 아군, 기지 코어를 지속 치료합니다.</div>
+            </div>
+          </div>
+          <button onclick="constructStructure('beacon')" class="px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-transform active:scale-95">
+            20 🧱 건설
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Vaccine Lab Shop Modal (T) -->
+  <div id="shop-modal" class="hidden absolute inset-0 z-30 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 pointer-events-auto">
+    <div class="hud-glass max-w-md w-full p-5 rounded-3xl border-2 border-yellow-400/60 shadow-2xl">
+      <div class="flex justify-between items-center mb-2">
+        <h3 class="title-font text-lg text-yellow-400 flex items-center gap-2">🛒 바이오 나노 연구소 상점</h3>
+        <button onclick="toggleShopModal()" class="w-8 h-8 rounded-lg bg-slate-800 text-slate-300 font-bold hover:bg-slate-700">✕</button>
+      </div>
+      <p class="text-xs text-slate-300 mb-4">좀비 처치 코인(🪙)으로 <span class="text-emerald-400 font-bold">백신 총</span>을 구매하세요! 좀비를 맞추면 시민 아군으로 정화됩니다.</p>
+
+      <div class="flex flex-col gap-2.5">
+        <!-- Vaccine Gun -->
+        <div class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900/90 border border-emerald-500/50">
+          <div class="flex items-center gap-3">
+            <span class="text-3xl">💉</span>
+            <div>
+              <div class="text-sm font-black text-emerald-300">나노 백신 총 (Vaccine Blaster)</div>
+              <div class="text-[11px] text-slate-400">좀비 명중 시 즉시 시민 아군으로 치료!</div>
+            </div>
+          </div>
+          <button id="btn-buy-vaccine" onclick="buyVaccineGun()" class="px-3 py-2 rounded-xl bg-yellow-400 hover:bg-yellow-300 text-slate-950 font-black text-xs transition-transform active:scale-95">
+            40 🪙 구매
+          </button>
+        </div>
+
+        <!-- Core Repair -->
+        <div class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900/90 border border-slate-700">
+          <div class="flex items-center gap-3">
+            <span class="text-3xl">🔮</span>
+            <div>
+              <div class="text-sm font-bold text-purple-300">기지 코어 긴급 복구</div>
+              <div class="text-[11px] text-slate-400">기지 코어의 내구도를 +150 즉시 수리합니다.</div>
+            </div>
+          </div>
+          <button onclick="buyCoreRepair()" class="px-3 py-2 rounded-xl bg-purple-500 hover:bg-purple-400 text-white font-bold text-xs transition-transform active:scale-95">
+            25 🪙 수리
+          </button>
+        </div>
+
+        <!-- Ally Reinforce Serum -->
+        <div class="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900/90 border border-slate-700">
+          <div class="flex items-center gap-3">
+            <span class="text-3xl">🛡️</span>
+            <div>
+              <div class="text-sm font-bold text-sky-300">시민 아군 강화 혈청</div>
+              <div class="text-[11px] text-slate-400">치료된 시민들의 최대 체력과 사격 피해량이 증가합니다.</div>
+            </div>
+          </div>
+          <button onclick="buyAllyUpgrade()" class="px-3 py-2 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition-transform active:scale-95">
+            30 🪙 연구
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Start Screen / Portal Overlay -->
+  <div id="start-screen" class="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/85 backdrop-blur-lg p-4 pointer-events-auto">
+    <div class="hud-glass max-w-lg w-full p-6 sm:p-8 rounded-3xl border border-cyan-400/40 text-center shadow-2xl">
+      <div class="inline-block px-3 py-1 rounded-full bg-cyan-950 border border-cyan-400 text-cyan-300 text-xs font-black mb-3">
+        🌐 3D VOXEL BASE SURVIVAL
+      </div>
+      <h1 class="title-font text-3xl sm:text-4xl text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-yellow-200 to-emerald-400 mb-2">
+        시크릿 베이스: 백신 구출작전
+      </h1>
+      <p class="text-xs sm:text-sm text-slate-300 mb-6 leading-relaxed">
+        중앙 <span class="text-purple-300 font-bold">비밀기지 코어</span>를 보호하며 기지를 100% 완공하세요!<br/>
+        코인을 모아 <span class="text-emerald-400 font-bold">백신 총</span>을 구매하면, 좀비를 쏴서 우리 편 시민으로 정화할 수 있습니다.<br/>
+        <span class="text-rose-400 text-[11px]">※ 주의: 아군 시민이 좀비에게 물리면 다시 적으로 감염됩니다!</span>
+      </p>
+
+      <!-- Site Access Code Input -->
+      <div class="max-w-xs mx-auto mb-6">
+        <div class="text-[11px] text-slate-400 mb-1 text-left font-bold">암호 코드 / 기지 프로토콜 입력 (선택)</div>
+        <div class="flex gap-2">
+          <input id="secret-code" type="text" placeholder="예: #비밀기지 또는 7777" class="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-yellow-300 text-sm font-mono focus:outline-none focus:border-cyan-400 placeholder-slate-600">
+        </div>
+        <div class="text-[10px] text-slate-500 mt-1 text-left">
+          * 추천 히든코드: <span class="text-yellow-400">#비밀기지</span> (지원포탑), <span class="text-cyan-400">7777</span> (자원폭탄), <span class="text-emerald-400">9999</span> (무적버프)
+        </div>
+      </div>
+
+      <button id="btn-start-game" onclick="startGameSession()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-black text-lg shadow-xl shadow-cyan-500/30 transition-transform active:scale-95 title-font">
+        🚀 작전 개시 (START MISSION)
+      </button>
+
+      <div class="mt-4 text-[11px] text-slate-400 flex justify-center gap-4">
+        <span>🎮 PC: WASD + SPACE</span>
+        <span>📱 모바일: 가상 조이스틱 터치</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div id="gameover-screen" class="hidden absolute inset-0 z-40 flex items-center justify-center bg-slate-950/90 backdrop-blur-lg p-4 pointer-events-auto">
+    <div class="hud-glass max-w-md w-full p-6 sm:p-8 rounded-3xl border border-rose-500/50 text-center shadow-2xl">
+      <div class="text-5xl mb-2">💥</div>
+      <h2 class="title-font text-3xl text-rose-500 mb-1">기지 코어 파괴 / 임무 실패</h2>
+      <p id="gameover-reason" class="text-xs text-slate-300 mb-4">좀비 군단에 의해 방어선이 무너졌습니다.</p>
+      
+      <div class="bg-slate-900/80 p-4 rounded-2xl border border-slate-800 text-sm mb-6 flex justify-around">
+        <div>
+          <div class="text-xs text-slate-400">최종 점수</div>
+          <div id="gameover-score" class="text-xl font-black text-yellow-400 font-mono">0</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">구출된 시민</div>
+          <div id="gameover-allies" class="text-xl font-black text-emerald-400 font-mono">0</div>
+        </div>
+      </div>
+
+      <button onclick="resetAndRestart()" class="w-full py-3.5 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-black text-base shadow-lg transition-transform active:scale-95 title-font">
+        🔄 다시 도전하기
+      </button>
+    </div>
+  </div>
+
+  <!-- Victory Screen -->
+  <div id="victory-screen" class="hidden absolute inset-0 z-40 flex items-center justify-center bg-slate-950/90 backdrop-blur-lg p-4 pointer-events-auto">
+    <div class="hud-glass max-w-md w-full p-6 sm:p-8 rounded-3xl border border-emerald-400 text-center shadow-2xl">
+      <div class="text-5xl mb-2">🏆</div>
+      <h2 class="title-font text-3xl text-emerald-400 mb-1">비밀기지 완공! 임무 성공</h2>
+      <p class="text-xs text-slate-300 mb-4">백신 기술을 확보하고 안전한 인류 요새를 구축했습니다!</p>
+      
+      <div class="bg-slate-900/80 p-4 rounded-2xl border border-slate-800 text-sm mb-6 flex justify-around">
+        <div>
+          <div class="text-xs text-slate-400">최종 점수</div>
+          <div id="victory-score" class="text-xl font-black text-yellow-400 font-mono">0</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">함께한 시민</div>
+          <div id="victory-allies" class="text-xl font-black text-emerald-400 font-mono">0</div>
+        </div>
+      </div>
+
+      <button onclick="resetAndRestart()" class="w-full py-3.5 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-base shadow-lg transition-transform active:scale-95 title-font">
+        🎉 무한 모드로 계속하기
+      </button>
+    </div>
+  </div>
+
+  <script>
+    /* ==========================================================================
+       SYNTHESIZED SOUND SYSTEM (Web Audio API - 0 External Audio Files)
+       ========================================================================== */
+    class SoundEngine {
+      constructor() {
+        this.ctx = null;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ctx.resume();
+        }
+      }
+      playLaser() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(120, now + 0.12);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.12);
+      }
+      playVaccineShot() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(520, now);
+        osc.frequency.exponentialRampToValueAtTime(1100, now + 0.15);
+        gain.gain.setValueAtTime(0.25, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      }
+      playCure() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C5 - E5 - G5 - C6
+        notes.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.06);
+          gain.gain.setValueAtTime(0.25, now + idx * 0.06);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + (idx + 1) * 0.12);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + idx * 0.06);
+          osc.stop(now + (idx + 1) * 0.12);
+        });
+      }
+      playInfection() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(360, now);
+        osc.frequency.linearRampToValueAtTime(80, now + 0.35);
+        gain.gain.setValueAtTime(0.35, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.35);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.35);
+      }
+      playCoin() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(988, now);
+        osc.frequency.setValueAtTime(1320, now + 0.07);
+        gain.gain.setValueAtTime(0.2, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.18);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.18);
+      }
+      playExplosion() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const bufferSize = this.ctx.sampleRate * 0.3;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.08));
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(380, now);
+        filter.frequency.linearRampToValueAtTime(40, now + 0.3);
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.4, now);
+        gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start(now);
+      }
+      playVictory() {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        const notes = [523.25, 659.25, 783.99, 1046.50, 1318.51];
+        notes.forEach((freq, idx) => {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+          gain.gain.setValueAtTime(0.3, now + idx * 0.12);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + (idx + 1) * 0.25);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now + idx * 0.12);
+          osc.stop(now + (idx + 1) * 0.25);
+        });
+      }
+    }
+
+    const sound = new SoundEngine();
+
+    /* ==========================================================================
+       GAME STATE & GLOBAL CONSTANTS
+       ========================================================================== */
+    const STATES = { MENU: 0, PLAYING: 1, GAMEOVER: 2, VICTORY: 3 };
+    let gameState = STATES.MENU;
+
+    let scene, camera, renderer;
+    let player, baseCoreGroup;
+    const ARENA_RADIUS = 75;
+
+    // Entities Arrays
+    const bullets = [];
+    const turretBullets = [];
+    const allyBullets = [];
+    const enemies = [];
+    const allies = [];
+    const structures = [];
+    const resourceNodes = [];
+    const particles = [];
+    const floatingPickups = [];
+
+    // Economy & Progress
+    let score = 0;
+    let resources = 15;
+    let coins = 20;
+    let baseProgress = 0;
+    let baseHp = 500;
+    const baseMaxHp = 500;
+    let wave = 1;
+    let waveTotal = 12;
+    let waveSpawned = 0;
+    let waveKilled = 0;
+    let spawnCooldown = 1.0;
+
+    // Weapons & Upgrades: Start with Vaccine Gun unlocked and equipped by default!
+    let hasVaccineGun = true;
+    let currentWeapon = 'VACCINE'; // 'BLASTER' or 'VACCINE'
+    let allyUpgradeLevel = 1;
+
+    // Player Stats
+    const playerStats = {
+      maxHp: 100,
+      hp: 100,
+      speed: 13.0,
+      turnSpeed: 3.4,
+      fireRate: 0.16,
+      fireCooldown: 0,
+      dashCooldown: 3.5,
+      dashTimer: 0,
+      isDashing: false,
+      dashDir: new THREE.Vector3(),
+      dashTimeLeft: 0,
+      rapidTimer: 0,
+      tripleTimer: 0,
+      speedTimer: 0
+    };
+
+    // Keyboard & Touch Inputs
+    const keys = {};
+    const touch = {
+      moveX: 0,
+      moveZ: 0,
+      turnLeft: false,
+      turnRight: false,
+      firing: false
+    };
+
+    /* ==========================================================================
+       THREE.JS INITIALIZATION & SCENE SETUP
+       ========================================================================== */
+    function initThree() {
+      const container = document.getElementById('canvas-container');
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x060914);
+      scene.fog = new THREE.FogExp2(0x060914, 0.015);
+
+      camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 400);
+      renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      container.appendChild(renderer.domElement);
+
+      // Lights
+      const ambient = new THREE.AmbientLight(0xffffff, 0.65);
+      scene.add(ambient);
+
+      const dirLight = new THREE.DirectionalLight(0xa5f3fc, 0.9);
+      dirLight.position.set(45, 60, 35);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 2048;
+      dirLight.shadow.mapSize.height = 2048;
+      dirLight.shadow.camera.near = 10;
+      dirLight.shadow.camera.far = 160;
+      dirLight.shadow.camera.left = -50;
+      dirLight.shadow.camera.right = 50;
+      dirLight.shadow.camera.top = 50;
+      dirLight.shadow.camera.bottom = -50;
+      scene.add(dirLight);
+
+      // Arena Floor
+      createArenaFloor();
+
+      // Central Base Core
+      createBaseCore();
+
+      // Player Avatar
+      createPlayerAvatar();
+
+      // Scatter Resource Nodes
+      spawnResourceCrystals();
+
+      // Event Listeners
+      window.addEventListener('resize', onWindowResize);
+      setupKeyboardControls();
+      setupTouchControls();
+    }
+
+    function createArenaFloor() {
+      const floorGeo = new THREE.PlaneGeometry(ARENA_RADIUS * 2, ARENA_RADIUS * 2);
+      const floorMat = new THREE.MeshStandardMaterial({
+        color: 0x0f172a,
+        roughness: 0.85,
+        metalness: 0.15
+      });
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.rotation.x = -Math.PI / 2;
+      floor.receiveShadow = true;
+      scene.add(floor);
+
+      // Cyber Grid Lines
+      const grid = new THREE.GridHelper(ARENA_RADIUS * 2, 40, 0x0284c7, 0x1e293b);
+      grid.position.y = 0.02;
+      scene.add(grid);
+
+      // Boundary Wall Pillars
+      const pillarCount = 36;
+      for (let i = 0; i < pillarCount; i++) {
+        const angle = (i / pillarCount) * Math.PI * 2;
+        const x = Math.cos(angle) * (ARENA_RADIUS - 1);
+        const z = Math.sin(angle) * (ARENA_RADIUS - 1);
+        const pillar = createVoxelBox(0x0284c7, 2, 6, 2);
+        pillar.position.set(x, 3, z);
+        scene.add(pillar);
+      }
+    }
+
+    function createVoxelBox(color, sx, sy, sz, emissive = 0x000000) {
+      const geo = new THREE.BoxGeometry(sx, sy, sz);
+      const mat = new THREE.MeshStandardMaterial({
+        color: color,
+        roughness: 0.5,
+        metalness: 0.2,
+        emissive: emissive,
+        emissiveIntensity: emissive !== 0x000000 ? 0.6 : 0
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    function createBaseCore() {
+      baseCoreGroup = new THREE.Group();
+      baseCoreGroup.position.set(0, 0, 0);
+
+      // Foundation base
+      const ped = createVoxelBox(0x1e1b4b, 8, 1.2, 8);
+      ped.position.y = 0.6;
+      baseCoreGroup.add(ped);
+
+      // Crystal core
+      const coreGeo = new THREE.OctahedronGeometry(2.4, 0);
+      const coreMat = new THREE.MeshStandardMaterial({
+        color: 0xc084fc,
+        roughness: 0.2,
+        metalness: 0.8,
+        emissive: 0x9333ea,
+        emissiveIntensity: 0.8
+      });
+      const crystal = new THREE.Mesh(coreGeo, coreMat);
+      crystal.position.y = 3.6;
+      crystal.castShadow = true;
+      baseCoreGroup.crystal = crystal;
+      baseCoreGroup.add(crystal);
+
+      // Glowing protective ring
+      const ringGeo = new THREE.TorusGeometry(3.6, 0.25, 8, 24);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.position.y = 3.6;
+      ring.rotation.x = Math.PI / 2;
+      baseCoreGroup.ring = ring;
+      baseCoreGroup.add(ring);
+
+      scene.add(baseCoreGroup);
+    }
+
+    function createPlayerAvatar() {
+      player = new THREE.Group();
+      player.position.set(0, 0, 8);
+
+      // Body (Armor)
+      const body = createVoxelBox(0x0284c7, 1.1, 1.3, 0.8);
+      body.position.y = 1.35;
+      player.add(body);
+
+      // Helmet & Visor
+      const head = createVoxelBox(0x0f172a, 0.9, 0.9, 0.9);
+      head.position.y = 2.45;
+      const visor = createVoxelBox(0x38bdf8, 0.75, 0.3, 0.25, 0x00f0ff);
+      visor.position.set(0, 2.45, 0.45);
+      player.add(head);
+      player.add(visor);
+
+      // Arms & Weapon
+      const leftArm = createVoxelBox(0x0369a1, 0.35, 1.1, 0.35);
+      leftArm.position.set(-0.75, 1.35, 0);
+      player.add(leftArm);
+
+      const rightArmGroup = new THREE.Group();
+      rightArmGroup.position.set(0.75, 1.35, 0);
+      const rArm = createVoxelBox(0x0369a1, 0.35, 1.1, 0.35);
+      rightArmGroup.add(rArm);
+
+      const gun = createVoxelBox(0x334155, 0.3, 0.3, 1.2, 0x0284c7);
+      gun.position.set(0.1, -0.2, 0.6);
+      rightArmGroup.add(gun);
+      player.add(rightArmGroup);
+      player.rightArm = rightArmGroup;
+
+      // Legs
+      const leftLeg = createVoxelBox(0x1e293b, 0.4, 0.9, 0.4);
+      leftLeg.position.set(-0.32, 0.45, 0);
+      player.add(leftLeg);
+      player.leftLeg = leftLeg;
+
+      const rightLeg = createVoxelBox(0x1e293b, 0.4, 0.9, 0.4);
+      rightLeg.position.set(0.32, 0.45, 0);
+      player.add(rightLeg);
+      player.rightLeg = rightLeg;
+
+      scene.add(player);
+    }
+
+    function createZombieMesh(type = 'normal') {
+      const group = new THREE.Group();
+      let color = 0x15803d; // Green skin
+      let scale = 1.0;
+
+      if (type === 'fast') {
+        color = 0xd97706; // Amber fast stalker
+        scale = 0.85;
+      } else if (type === 'tank') {
+        color = 0xb91c1c; // Red heavy brute
+        scale = 1.5;
+      }
+
+      const body = createVoxelBox(color, 1.0 * scale, 1.2 * scale, 0.7 * scale);
+      body.position.y = 1.2 * scale;
+      group.add(body);
+
+      const head = createVoxelBox(color, 0.8 * scale, 0.8 * scale, 0.8 * scale);
+      head.position.y = 2.2 * scale;
+      group.add(head);
+
+      // Glowing zombie red eyes
+      const eyeL = createVoxelBox(0xff0000, 0.15 * scale, 0.15 * scale, 0.15 * scale, 0xff0000);
+      eyeL.position.set(-0.2 * scale, 2.3 * scale, 0.42 * scale);
+      const eyeR = createVoxelBox(0xff0000, 0.15 * scale, 0.15 * scale, 0.15 * scale, 0xff0000);
+      eyeR.position.set(0.2 * scale, 2.3 * scale, 0.42 * scale);
+      group.add(eyeL);
+      group.add(eyeR);
+
+      // Zombie reach arms
+      const armL = createVoxelBox(color, 0.3 * scale, 0.3 * scale, 1.0 * scale);
+      armL.position.set(-0.65 * scale, 1.4 * scale, 0.5 * scale);
+      const armR = createVoxelBox(color, 0.3 * scale, 0.3 * scale, 1.0 * scale);
+      armR.position.set(0.65 * scale, 1.4 * scale, 0.5 * scale);
+      group.add(armL);
+      group.add(armR);
+
+      const legL = createVoxelBox(0x1f2937, 0.35 * scale, 0.8 * scale, 0.35 * scale);
+      legL.position.set(-0.28 * scale, 0.4 * scale, 0);
+      group.add(legL);
+      group.legL = legL;
+
+      const legR = createVoxelBox(0x1f2937, 0.35 * scale, 0.8 * scale, 0.35 * scale);
+      legR.position.set(0.28 * scale, 0.4 * scale, 0);
+      group.add(legR);
+      group.legR = legR;
+
+      return group;
+    }
+
+    function createHumanAllyMesh() {
+      const group = new THREE.Group();
+      // Friendly white & emerald attire
+      const body = createVoxelBox(0x059669, 0.95, 1.2, 0.65);
+      body.position.y = 1.2;
+      group.add(body);
+
+      // Human skin head
+      const head = createVoxelBox(0xfde047, 0.75, 0.75, 0.75);
+      head.position.y = 2.15;
+      group.add(head);
+
+      // Friendly Bandana
+      const band = createVoxelBox(0x38bdf8, 0.8, 0.2, 0.8);
+      band.position.y = 2.55;
+      group.add(band);
+
+      // Mini Blaster
+      const armR = new THREE.Group();
+      armR.position.set(0.65, 1.2, 0);
+      const armMesh = createVoxelBox(0x059669, 0.3, 0.9, 0.3);
+      armR.add(armMesh);
+      const allyGun = createVoxelBox(0x38bdf8, 0.2, 0.2, 0.6, 0x10b981);
+      allyGun.position.set(0, -0.2, 0.35);
+      armR.add(allyGun);
+      group.add(armR);
+
+      const armL = createVoxelBox(0x059669, 0.3, 0.9, 0.3);
+      armL.position.set(-0.65, 1.2, 0);
+      group.add(armL);
+
+      const legL = createVoxelBox(0x1e293b, 0.35, 0.8, 0.35);
+      legL.position.set(-0.25, 0.4, 0);
+      group.add(legL);
+      group.legL = legL;
+
+      const legR = createVoxelBox(0x1e293b, 0.35, 0.8, 0.35);
+      legR.position.set(0.25, 0.4, 0);
+      group.add(legR);
+      group.legR = legR;
+
+      return group;
+    }
+
+    function spawnResourceCrystals() {
+      for (let i = 0; i < 14; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 16 + Math.random() * (ARENA_RADIUS - 26);
+        const x = Math.cos(angle) * dist;
+        const z = Math.sin(angle) * dist;
+
+        const node = createVoxelBox(0xf59e0b, 1.8, 3.2, 1.8, 0xd97706);
+        node.position.set(x, 1.6, z);
+        node.rotation.y = Math.random() * Math.PI;
+        scene.add(node);
+
+        resourceNodes.push({
+          mesh: node,
+          position: new THREE.Vector3(x, 0, z),
+          hp: 60,
+          maxHp: 60
+        });
+      }
+    }
+
+    /* ==========================================================================
+       PARTICLE & FLOATING TEXT SYSTEMS
+       ========================================================================== */
+    function spawnVoxelExplosion(pos, color, count = 16, power = 1.0) {
+      for (let i = 0; i < count; i++) {
+        const size = 0.2 + Math.random() * 0.25;
+        const geo = new THREE.BoxGeometry(size, size, size);
+        const mat = new THREE.MeshBasicMaterial({ color: color });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.copy(pos);
+
+        const velocity = new THREE.Vector3(
+          (Math.random() - 0.5) * 16 * power,
+          (Math.random() * 12 + 4) * power,
+          (Math.random() - 0.5) * 16 * power
+        );
+
+        particles.push({
+          mesh,
+          velocity,
+          life: 0.6 + Math.random() * 0.4,
+          maxLife: 1.0
+        });
+        scene.add(mesh);
+      }
+    }
+
+    function showFloatingCombatText(worldPos, text, color = '#ffffff') {
+      const container = document.getElementById('damage-container');
+      const div = document.createElement('div');
+      div.className = 'floating-text';
+      div.innerText = text;
+      div.style.color = color;
+
+      const screenPos = toScreenPosition(worldPos);
+      div.style.left = `${screenPos.x}px`;
+      div.style.top = `${screenPos.y}px`;
+
+      container.appendChild(div);
+      setTimeout(() => {
+        if (div.parentNode) div.parentNode.removeChild(div);
+      }, 850);
+    }
+
+    function toScreenPosition(worldPos) {
+      const v = worldPos.clone().project(camera);
+      return {
+        x: (v.x * 0.5 + 0.5) * window.innerWidth,
+        y: (-(v.y * 0.5) + 0.5) * window.innerHeight
+      };
+    }
+
+    /* ==========================================================================
+       PICKUPS & BUFFS
+       ========================================================================== */
+    function spawnGroundDrop(pos, forcedType = null) {
+      let type = forcedType;
+      if (!type) {
+        const r = Math.random();
+        if (r < 0.45) type = 'COIN';
+        else if (r < 0.75) type = 'BRICK';
+        else {
+          const powerups = ['HEAL', 'RAPID', 'TRIPLE', 'SPEED'];
+          type = powerups[Math.floor(Math.random() * powerups.length)];
+        }
+      }
+
+      let color = 0xfacc15;
+      if (type === 'BRICK') color = 0xf97316;
+      else if (type === 'HEAL') color = 0x10b981;
+      else if (type === 'RAPID') color = 0xfde047;
+      else if (type === 'TRIPLE') color = 0x38bdf8;
+      else if (type === 'SPEED') color = 0xa855f7;
+
+      const drop = createVoxelBox(color, 0.65, 0.65, 0.65, color);
+      drop.position.copy(pos);
+      drop.position.y = 0.8;
+      scene.add(drop);
+
+      floatingPickups.push({
+        mesh: drop,
+        type: type,
+        time: 0
+      });
+    }
+
+    function applyPickupBuff(type) {
+      sound.playCoin();
+      if (type === 'COIN') {
+        coins += 5;
+        score += 50;
+        showFloatingCombatText(player.position, '+5 🪙 코인!', '#facc15');
+      } else if (type === 'BRICK') {
+        resources += 6;
+        addBaseProgress(2);
+        showFloatingCombatText(player.position, '+6 🧱 자원!', '#fb923c');
+      } else if (type === 'HEAL') {
+        playerStats.hp = Math.min(playerStats.maxHp, playerStats.hp + 35);
+        showFloatingCombatText(player.position, '+35 실드 회복!', '#34d399');
+      } else if (type === 'RAPID') {
+        playerStats.rapidTimer = 8.0;
+        showFloatingCombatText(player.position, '⚡ 속사 모드 ON!', '#fde047');
+      } else if (type === 'TRIPLE') {
+        playerStats.tripleTimer = 8.0;
+        showFloatingCombatText(player.position, '🔱 3연장 발사 ON!', '#38bdf8');
+      } else if (type === 'SPEED') {
+        playerStats.speedTimer = 8.0;
+        showFloatingCombatText(player.position, '👟 이동속도 부스트!', '#a855f7');
+      }
+      updateHUD();
+    }
+
+    /* ==========================================================================
+       ZOMBIE TO ALLY CURE & RE-INFECTION ENGINE
+       ========================================================================== */
+    function cureZombieToAlly(zombie, index) {
+      sound.playCure();
+      const pos = zombie.mesh.position.clone();
+      scene.remove(zombie.mesh);
+      enemies.splice(index, 1);
+
+      spawnVoxelExplosion(pos, 0x10b981, 26, 1.2);
+      showFloatingCombatText(pos, '✨ 치료 완료! 시민 아군 합류!', '#10b981');
+
+      const allyMesh = createHumanAllyMesh();
+      allyMesh.position.copy(pos);
+      scene.add(allyMesh);
+
+      const maxHp = 80 + allyUpgradeLevel * 40;
+      allies.push({
+        mesh: allyMesh,
+        hp: maxHp,
+        maxHp: maxHp,
+        speed: 6.5,
+        fireCooldown: 0,
+        fireRate: 0.85,
+        walkAnim: Math.random() * 5
+      });
+
+      addBaseProgress(6);
+      coins += 5;
+      score += 150;
+      waveKilled++;
+      checkWaveStatus();
+      updateHUD();
+    }
+
+    function reInfectAllyToZombie(ally, index) {
+      sound.playInfection();
+      const pos = ally.mesh.position.clone();
+      scene.remove(ally.mesh);
+      allies.splice(index, 1);
+
+      spawnVoxelExplosion(pos, 0xef4444, 28, 1.3);
+      showFloatingCombatText(pos, '⚠️ 감염 발생! 다시 좀비로 변했습니다!', '#ef4444');
+
+      const zMesh = createZombieMesh('fast');
+      zMesh.position.copy(pos);
+      scene.add(zMesh);
+
+      enemies.push({
+        mesh: zMesh,
+        type: 'fast',
+        hp: 55 + wave * 10,
+        maxHp: 55 + wave * 10,
+        speed: 7.2,
+        attackCooldown: 0,
+        walkAnim: 0
+      });
+
+      updateHUD();
+    }
+
+    /* ==========================================================================
+       STRUCTURES & BASE BUILDING (Wall, Turret, Beacon)
+       ========================================================================== */
+    function toggleBuildModal() {
+      if (gameState !== STATES.PLAYING) return;
+      const m = document.getElementById('build-modal');
+      m.classList.toggle('hidden');
+    }
+
+    function toggleShopModal() {
+      if (gameState !== STATES.PLAYING) return;
+      const m = document.getElementById('shop-modal');
+      m.classList.toggle('hidden');
+    }
+
+    function constructStructure(type) {
+      let cost = 10;
+      if (type === 'turret') cost = 25;
+      if (type === 'beacon') cost = 20;
+
+      if (resources < cost) {
+        showFloatingCombatText(player.position, '자원(🧱)이 부족합니다!', '#ef4444');
+        return;
+      }
+
+      resources -= cost;
+      sound.playLaser();
+
+      const fwd = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+      const buildPos = player.position.clone().add(fwd.multiplyScalar(3.0));
+      buildPos.y = 0;
+
+      const group = new THREE.Group();
+      group.position.copy(buildPos);
+
+      if (type === 'wall') {
+        const wall = createVoxelBox(0x64748b, 3.2, 2.4, 0.8, 0x334155);
+        wall.position.y = 1.2;
+        group.add(wall);
+        structures.push({ type: 'wall', mesh: group, hp: 200, maxHp: 200, position: buildPos });
+        addBaseProgress(4);
+      } else if (type === 'turret') {
+        const base = createVoxelBox(0x0369a1, 1.6, 1.4, 1.6);
+        base.position.y = 0.7;
+        group.add(base);
+        const head = createVoxelBox(0x38bdf8, 1.0, 0.8, 1.4, 0x0284c7);
+        head.position.y = 1.8;
+        group.add(head);
+        group.turretHead = head;
+        structures.push({ type: 'turret', mesh: group, hp: 120, maxHp: 120, position: buildPos, fireTimer: 0, fireRate: 0.65 });
+        addBaseProgress(7);
+      } else if (type === 'beacon') {
+        const post = createVoxelBox(0x065f46, 1.0, 2.2, 1.0);
+        post.position.y = 1.1;
+        group.add(post);
+        const crystal = createVoxelBox(0x34d399, 0.9, 0.9, 0.9, 0x10b981);
+        crystal.position.y = 2.6;
+        group.add(crystal);
+        group.beaconCrystal = crystal;
+        structures.push({ type: 'beacon', mesh: group, hp: 100, maxHp: 100, position: buildPos, healTimer: 0 });
+        addBaseProgress(6);
+      }
+
+      scene.add(group);
+      spawnVoxelExplosion(buildPos, 0x38bdf8, 18, 0.8);
+      showFloatingCombatText(buildPos, `🏗️ ${type.toUpperCase()} 완공!`, '#38bdf8');
+      toggleBuildModal();
+      updateHUD();
+    }
+
+    /* ==========================================================================
+       SHOP PURCHASES & WEAPON SWAP
+       ========================================================================== */
+    function buyVaccineGun() {
+      if (hasVaccineGun) {
+        showFloatingCombatText(player.position, '이미 백신 총을 보유하고 있습니다!', '#38bdf8');
+        return;
+      }
+      if (coins < 40) {
+        showFloatingCombatText(player.position, '코인이 부족합니다! (필요: 40 🪙)', '#ef4444');
+        return;
+      }
+      coins -= 40;
+      hasVaccineGun = true;
+      selectWeapon('VACCINE');
+      sound.playCure();
+      showFloatingCombatText(player.position, '💉 나노 백신 총 획득! [키: 2]', '#10b981');
+      document.getElementById('btn-buy-vaccine').innerText = '보유중 (1/2 전환)';
+      document.getElementById('btn-buy-vaccine').disabled = true;
+      toggleShopModal();
+      updateHUD();
+    }
+
+    function buyCoreRepair() {
+      if (coins < 25) {
+        showFloatingCombatText(player.position, '코인이 부족합니다! (필요: 25 🪙)', '#ef4444');
+        return;
+      }
+      coins -= 25;
+      baseHp = Math.min(baseMaxHp, baseHp + 150);
+      sound.playLaser();
+      showFloatingCombatText(baseCoreGroup.position.clone().add(new THREE.Vector3(0, 3, 0)), '+150 기지 코어 복구!', '#c084fc');
+      updateHUD();
+    }
+
+    function buyAllyUpgrade() {
+      if (coins < 30) {
+        showFloatingCombatText(player.position, '코인이 부족합니다! (필요: 30 🪙)', '#ef4444');
+        return;
+      }
+      coins -= 30;
+      allyUpgradeLevel++;
+      sound.playCure();
+      showFloatingCombatText(player.position, `🛡️ 시민 강화 레벨 ${allyUpgradeLevel}!`, '#38bdf8');
+      allies.forEach(a => {
+        a.maxHp += 40;
+        a.hp = a.maxHp;
+      });
+      updateHUD();
+    }
+
+    function selectWeapon(wType) {
+      if (wType === 'VACCINE' && !hasVaccineGun) {
+        showFloatingCombatText(player.position, '상점(T)에서 백신 총을 먼저 구매하세요!', '#facc15');
+        return;
+      }
+      currentWeapon = wType;
+      const nameBadge = document.getElementById('cur-weapon-name');
+      const fireTxt = document.getElementById('touch-fire-txt');
+      const fireEmoji = document.getElementById('touch-fire-emoji');
+
+      if (currentWeapon === 'VACCINE') {
+        nameBadge.innerText = '💉 나노 백신 총 (치료 탄환)';
+        nameBadge.className = 'font-bold text-xs sm:text-sm text-emerald-300 bg-emerald-950/80 border border-emerald-400 px-2 py-0.5 rounded-lg w-full text-center';
+        if (fireTxt) fireTxt.innerText = '백신';
+        if (fireEmoji) fireEmoji.innerText = '💉';
+      } else {
+        nameBadge.innerText = '🔫 플라즈마 블래스터 (공격)';
+        nameBadge.className = 'font-bold text-xs sm:text-sm text-cyan-300 bg-sky-950/70 border border-sky-400/40 px-2 py-0.5 rounded-lg w-full text-center';
+        if (fireTxt) fireTxt.innerText = '공격';
+        if (fireEmoji) fireEmoji.innerText = '🔫';
+      }
+    }
+
+    /* ==========================================================================
+       SHOOTING & DASH ATTACK
+       ========================================================================== */
+    function firePlayerWeapon() {
+      if (playerStats.fireCooldown > 0) return;
+
+      const isVaccine = currentWeapon === 'VACCINE';
+      const baseCooldown = isVaccine ? 0.26 : playerStats.fireRate;
+      playerStats.fireCooldown = playerStats.rapidTimer > 0 ? baseCooldown * 0.5 : baseCooldown;
+
+      if (isVaccine) sound.playVaccineShot();
+      else sound.playLaser();
+
+      const fwd = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+      const spawnPos = player.position.clone().add(new THREE.Vector3(0, 1.4, 0)).add(fwd.clone().multiplyScalar(1.2));
+      const spreadAngles = playerStats.tripleTimer > 0 ? [-0.22, 0, 0.22] : [0];
+
+      spreadAngles.forEach(ang => {
+        const dir = fwd.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), ang);
+        const color = isVaccine ? 0x10b981 : 0x00f0ff;
+        const bGeo = new THREE.BoxGeometry(0.24, 0.24, isVaccine ? 1.0 : 0.8);
+        const bMat = new THREE.MeshBasicMaterial({ color: color });
+        const mesh = new THREE.Mesh(bGeo, bMat);
+
+        mesh.position.copy(spawnPos);
+        mesh.quaternion.copy(player.quaternion);
+        mesh.rotateY(ang);
+
+        bullets.push({
+          mesh,
+          velocity: dir.multiplyScalar(42),
+          damage: isVaccine ? 25 : 45,
+          life: 1.5,
+          isVaccine: isVaccine
+        });
+        scene.add(mesh);
+      });
+
+      if (player.rightArm) player.rightArm.position.z = -0.2;
+    }
+
+    function triggerDash() {
+      if (playerStats.dashTimer > 0) return;
+      playerStats.dashTimer = playerStats.dashCooldown;
+      playerStats.isDashing = true;
+      playerStats.dashTimeLeft = 0.2;
+
+      let mx = touch.moveX;
+      let mz = touch.moveZ;
+      if (keys.w || keys.ArrowUp) mz += 1;
+      if (keys.s || keys.ArrowDown) mz -= 1;
+      if (keys.a) mx -= 1;
+      if (keys.d) mx += 1;
+
+      const fwd = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+      const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+
+      const dir = new THREE.Vector3();
+      if (Math.abs(mx) > 0.1 || Math.abs(mz) > 0.1) {
+        dir.addScaledVector(fwd, mz).addScaledVector(right, mx).normalize();
+      } else {
+        dir.copy(fwd);
+      }
+      playerStats.dashDir = dir;
+
+      sound.playExplosion();
+      spawnVoxelExplosion(player.position, 0x38bdf8, 20, 1.2);
+
+      // Radial knockback to nearby enemies
+      enemies.forEach(e => {
+        if (e.mesh.position.distanceTo(player.position) < 8.0) {
+          const push = e.mesh.position.clone().sub(player.position).normalize().multiplyScalar(10);
+          e.mesh.position.add(push);
+          e.hp -= 35;
+          showFloatingCombatText(e.mesh.position, '대시 충격 35', '#38bdf8');
+        }
+      });
+    }
+
+    /* ==========================================================================
+       SPAWNING & PROGRESSION
+       ========================================================================== */
+    function spawnZombieWave() {
+      if (waveSpawned >= waveTotal) return;
+      waveSpawned++;
+
+      const angle = Math.random() * Math.PI * 2;
+      const x = Math.cos(angle) * (ARENA_RADIUS - 5);
+      const z = Math.sin(angle) * (ARENA_RADIUS - 5);
+
+      const roll = Math.random();
+      let type = 'normal';
+      let hp = 70 + wave * 12;
+      let speed = 4.8 + wave * 0.2;
+
+      if (roll < 0.25) {
+        type = 'fast';
+        hp = 50 + wave * 8;
+        speed = 7.6 + wave * 0.25;
+      } else if (roll < 0.45 && wave >= 2) {
+        type = 'tank';
+        hp = 180 + wave * 25;
+        speed = 3.2 + wave * 0.15;
+      }
+
+      const zMesh = createZombieMesh(type);
+      zMesh.position.set(x, 0, z);
+      scene.add(zMesh);
+
+      enemies.push({
+        mesh: zMesh,
+        type: type,
+        hp: hp,
+        maxHp: hp,
+        speed: speed,
+        attackCooldown: 0,
+        walkAnim: Math.random() * 5
+      });
+    }
+
+    function checkWaveStatus() {
+      if (waveKilled >= waveTotal) {
+        wave++;
+        waveTotal = 12 + wave * 6;
+        waveSpawned = 0;
+        waveKilled = 0;
+        sound.playVictory();
+        addBaseProgress(15);
+        showFloatingCombatText(player.position, `🎉 웨이브 ${wave} 도달! 기지 방어 강화`, '#38bdf8');
+      }
+    }
+
+    function addBaseProgress(amount) {
+      baseProgress = Math.min(100, baseProgress + amount);
+      if (baseProgress >= 100 && gameState === STATES.PLAYING) {
+        triggerVictory();
+      }
+    }
+
+    function triggerGameOver(reason) {
+      gameState = STATES.GAMEOVER;
+      sound.playExplosion();
+      document.getElementById('gameover-reason').innerText = reason;
+      document.getElementById('gameover-score').innerText = score;
+      document.getElementById('gameover-allies').innerText = allies.length;
+      document.getElementById('gameover-screen').classList.remove('hidden');
+    }
+
+    function triggerVictory() {
+      gameState = STATES.VICTORY;
+      sound.playVictory();
+      document.getElementById('victory-score').innerText = score;
+      document.getElementById('victory-allies').innerText = allies.length;
+      document.getElementById('victory-screen').classList.remove('hidden');
+    }
+
+    /* ==========================================================================
+       MAIN GAME LOOP & ANIMATION
+       ========================================================================== */
+    let lastTime = performance.now();
+
+    function gameLoop(now) {
+      requestAnimationFrame(gameLoop);
+      const delta = Math.min(0.08, (now - lastTime) / 1000);
+      lastTime = now;
+
+      if (gameState === STATES.PLAYING) {
+        updateGameWorld(delta, now);
+      }
+
+      // Base crystal animation
+      if (baseCoreGroup && baseCoreGroup.crystal) {
+        baseCoreGroup.crystal.rotation.y += delta * 1.2;
+        baseCoreGroup.crystal.rotation.x = Math.sin(now * 0.002) * 0.2;
+        baseCoreGroup.ring.rotation.z += delta * 1.5;
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    function updateGameWorld(delta, now) {
+      // Cooldown Timers
+      if (playerStats.fireCooldown > 0) playerStats.fireCooldown -= delta;
+      if (playerStats.dashTimer > 0) playerStats.dashTimer -= delta;
+      if (playerStats.rapidTimer > 0) playerStats.rapidTimer = Math.max(0, playerStats.rapidTimer - delta);
+      if (playerStats.tripleTimer > 0) playerStats.tripleTimer = Math.max(0, playerStats.tripleTimer - delta);
+      if (playerStats.speedTimer > 0) playerStats.speedTimer = Math.max(0, playerStats.speedTimer - delta);
+
+      // Dash Logic
+      if (playerStats.isDashing) {
+        playerStats.dashTimeLeft -= delta;
+        player.position.addScaledVector(playerStats.dashDir, 36 * delta);
+        if (playerStats.dashTimeLeft <= 0) playerStats.isDashing = false;
+      } else {
+        // Normal Move & Turning
+        const spd = playerStats.speed * (playerStats.speedTimer > 0 ? 1.4 : 1.0);
+        let mx = touch.moveX;
+        let mz = touch.moveZ;
+        if (keys.w || keys.ArrowUp) mz += 1;
+        if (keys.s || keys.ArrowDown) mz -= 1;
+        if (keys.a) mx -= 1;
+        if (keys.d) mx += 1;
+
+        const fwd = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+        const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+
+        if (Math.abs(mx) > 0.05 || Math.abs(mz) > 0.05) {
+          const moveDir = new THREE.Vector3();
+          moveDir.addScaledVector(fwd, mz).addScaledVector(right, mx).normalize();
+          player.position.addScaledVector(moveDir, spd * delta);
+
+          const swing = Math.sin(now * 0.014) * 0.45;
+          if (player.leftLeg) player.leftLeg.rotation.x = swing;
+          if (player.rightLeg) player.rightLeg.rotation.x = -swing;
+        } else {
+          if (player.leftLeg) player.leftLeg.rotation.x = 0;
+          if (player.rightLeg) player.rightLeg.rotation.x = 0;
+        }
+
+        let turn = 0;
+        if (keys.q || keys.ArrowLeft || touch.turnLeft) turn += 1;
+        if (keys.e || keys.ArrowRight || touch.turnRight) turn -= 1;
+
+        if (turn !== 0) {
+          player.rotation.y += turn * playerStats.turnSpeed * delta;
+        } else {
+          // Soft Auto-Aim toward nearest zombie
+          let nearestZ = null;
+          let minD = 22;
+          enemies.forEach(z => {
+            const d = z.mesh.position.distanceTo(player.position);
+            if (d < minD) { minD = d; nearestZ = z; }
+          });
+          if (nearestZ) {
+            const targetAngle = Math.atan2(
+              nearestZ.mesh.position.x - player.position.x,
+              nearestZ.mesh.position.z - player.position.z
+            );
+            let diff = targetAngle - player.rotation.y;
+            while (diff < -Math.PI) diff += Math.PI * 2;
+            while (diff > Math.PI) diff -= Math.PI * 2;
+            player.rotation.y += diff * 3.2 * delta;
+          }
+        }
+
+        if (keys.Space || touch.firing) {
+          firePlayerWeapon();
+        }
+      }
+
+      // Restrict player inside arena
+      const maxR = ARENA_RADIUS - 3;
+      player.position.x = Math.max(-maxR, Math.min(maxR, player.position.x));
+      player.position.z = Math.max(-maxR, Math.min(maxR, player.position.z));
+
+      // Camera Follow
+      const camOffset = new THREE.Vector3(0, 11, -15).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.rotation.y);
+      camera.position.lerp(player.position.clone().add(camOffset), 0.12);
+      camera.lookAt(player.position.clone().add(new THREE.Vector3(0, 2.0, 0)));
+
+      // Spawn Enemy Cooldown
+      spawnCooldown -= delta;
+      if (spawnCooldown <= 0) {
+        spawnZombieWave();
+        spawnCooldown = Math.max(0.6, 2.0 - wave * 0.12);
+      }
+
+      // Bullets Update (Player)
+      for (let i = bullets.length - 1; i >= 0; i--) {
+        const b = bullets[i];
+        b.mesh.position.addScaledVector(b.velocity, delta);
+        b.life -= delta;
+
+        let hit = false;
+        // Hit Resource crystals
+        for (let r of resourceNodes) {
+          if (b.mesh.position.distanceTo(r.position.clone().add(new THREE.Vector3(0, 1.5, 0))) < 1.6) {
+            r.hp -= 20;
+            spawnVoxelExplosion(b.mesh.position, 0xf59e0b, 6, 0.4);
+            if (r.hp <= 0) {
+              sound.playExplosion();
+              spawnGroundDrop(r.position, 'BRICK');
+              spawnGroundDrop(r.position, 'COIN');
+              r.hp = r.maxHp;
+            }
+            scene.remove(b.mesh);
+            bullets.splice(i, 1);
+            hit = true;
+            break;
+          }
+        }
+        if (hit) continue;
+
+        // Hit Enemies: If Vaccine Weapon, Cure into Ally!
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const z = enemies[j];
+          const hitR = z.type === 'tank' ? 1.8 : 1.2;
+          if (b.mesh.position.distanceTo(z.mesh.position.clone().add(new THREE.Vector3(0, 1.2, 0))) < hitR) {
+            if (b.isVaccine) {
+              cureZombieToAlly(z, j);
+            } else {
+              sound.playLaser();
+              z.hp -= b.damage;
+              spawnVoxelExplosion(b.mesh.position, 0xfacc15, 6, 0.5);
+              showFloatingCombatText(z.mesh.position, `${b.damage}`, '#fde047');
+              if (z.hp <= 0) {
+                defeatZombie(z, j);
+              }
+            }
+            scene.remove(b.mesh);
+            bullets.splice(i, 1);
+            hit = true;
+            break;
+          }
+        }
+        if (hit) continue;
+
+        if (b.life <= 0 || b.mesh.position.length() > ARENA_RADIUS) {
+          scene.remove(b.mesh);
+          bullets.splice(i, 1);
+        }
+      }
+
+      // Update Allies (Follow Player & Shoot Zombies)
+      for (let i = allies.length - 1; i >= 0; i--) {
+        const ally = allies[i];
+        ally.fireCooldown -= delta;
+
+        // Target nearest zombie
+        let targetZ = null;
+        let minD = 22;
+        enemies.forEach(z => {
+          const d = z.mesh.position.distanceTo(ally.mesh.position);
+          if (d < minD) { minD = d; targetZ = z; }
+        });
+
+        // Movement: Stay close to player
+        const distP = ally.mesh.position.distanceTo(player.position);
+        if (distP > 7.0) {
+          const toP = player.position.clone().sub(ally.mesh.position).normalize();
+          toP.y = 0;
+          ally.mesh.position.addScaledVector(toP, ally.speed * delta);
+          ally.mesh.rotation.y = Math.atan2(toP.x, toP.z);
+        } else if (targetZ) {
+          const toZ = targetZ.mesh.position.clone().sub(ally.mesh.position).normalize();
+          toZ.y = 0;
+          ally.mesh.rotation.y = Math.atan2(toZ.x, toZ.z);
+        }
+
+        // Shoot at zombie
+        if (targetZ && ally.fireCooldown <= 0) {
+          ally.fireCooldown = ally.fireRate;
+          sound.playLaser();
+          const abGeo = new THREE.BoxGeometry(0.2, 0.2, 0.6);
+          const abMat = new THREE.MeshBasicMaterial({ color: 0x34d399 });
+          const ab = new THREE.Mesh(abGeo, abMat);
+          ab.position.copy(ally.mesh.position).add(new THREE.Vector3(0, 1.2, 0));
+          const dir = targetZ.mesh.position.clone().add(new THREE.Vector3(0, 1.0, 0)).sub(ab.position).normalize();
+
+          allyBullets.push({
+            mesh: ab,
+            velocity: dir.multiplyScalar(35),
+            damage: 22 + allyUpgradeLevel * 8,
+            life: 1.3
+          });
+          scene.add(ab);
+        }
+      }
+
+      // Ally Bullets Update
+      for (let i = allyBullets.length - 1; i >= 0; i--) {
+        const ab = allyBullets[i];
+        ab.mesh.position.addScaledVector(ab.velocity, delta);
+        ab.life -= delta;
+
+        let hit = false;
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const z = enemies[j];
+          if (ab.mesh.position.distanceTo(z.mesh.position.clone().add(new THREE.Vector3(0, 1.2, 0))) < 1.3) {
+            z.hp -= ab.damage;
+            spawnVoxelExplosion(ab.mesh.position, 0x34d399, 5, 0.4);
+            showFloatingCombatText(z.mesh.position, `${ab.damage}`, '#34d399');
+            scene.remove(ab.mesh);
+            allyBullets.splice(i, 1);
+            if (z.hp <= 0) defeatZombie(z, j);
+            hit = true;
+            break;
+          }
+        }
+        if (hit) continue;
+
+        if (ab.life <= 0) {
+          scene.remove(ab.mesh);
+          allyBullets.splice(i, 1);
+        }
+      }
+
+      // Update Structures (Turret attack & Beacon healing)
+      structures.forEach(s => {
+        if (s.type === 'turret') {
+          s.fireTimer -= delta;
+          let target = null;
+          let minD = 20;
+          enemies.forEach(z => {
+            const d = z.mesh.position.distanceTo(s.mesh.position);
+            if (d < minD) { minD = d; target = z; }
+          });
+          if (target) {
+            if (s.mesh.turretHead) s.mesh.turretHead.lookAt(target.mesh.position.clone().add(new THREE.Vector3(0, 1.2, 0)));
+            if (s.fireTimer <= 0) {
+              s.fireTimer = s.fireRate;
+              sound.playLaser();
+              const tbGeo = new THREE.BoxGeometry(0.2, 0.2, 0.6);
+              const tbMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+              const tb = new THREE.Mesh(tbGeo, tbMat);
+              tb.position.copy(s.mesh.position).add(new THREE.Vector3(0, 1.8, 0));
+              const dir = target.mesh.position.clone().add(new THREE.Vector3(0, 1.2, 0)).sub(tb.position).normalize();
+
+              turretBullets.push({
+                mesh: tb,
+                velocity: dir.multiplyScalar(38),
+                damage: 26,
+                life: 1.2
+              });
+              scene.add(tb);
+            }
+          }
+        } else if (s.type === 'beacon') {
+          s.healTimer -= delta;
+          if (s.mesh.beaconCrystal) s.mesh.beaconCrystal.rotation.y += delta * 2;
+          if (s.healTimer <= 0) {
+            s.healTimer = 2.0;
+            // Heal player
+            if (player.position.distanceTo(s.mesh.position) < 12) {
+              playerStats.hp = Math.min(playerStats.maxHp, playerStats.hp + 12);
+              showFloatingCombatText(player.position, '+12 실드 회복', '#34d399');
+            }
+            // Heal base core
+            if (baseCoreGroup.position.distanceTo(s.mesh.position) < 14) {
+              baseHp = Math.min(baseMaxHp, baseHp + 15);
+              showFloatingCombatText(baseCoreGroup.position.clone().add(new THREE.Vector3(0, 3, 0)), '+15 코어 수리', '#38bdf8');
+            }
+            // Heal allies
+            allies.forEach(a => {
+              if (a.mesh.position.distanceTo(s.mesh.position) < 12) {
+                a.hp = Math.min(a.maxHp, a.hp + 15);
+              }
+            });
+          }
+        }
+      });
+
+      // Turret Bullets Update
+      for (let i = turretBullets.length - 1; i >= 0; i--) {
+        const tb = turretBullets[i];
+        tb.mesh.position.addScaledVector(tb.velocity, delta);
+        tb.life -= delta;
+
+        let hit = false;
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const z = enemies[j];
+          if (tb.mesh.position.distanceTo(z.mesh.position.clone().add(new THREE.Vector3(0, 1.2, 0))) < 1.3) {
+            z.hp -= tb.damage;
+            spawnVoxelExplosion(tb.mesh.position, 0x38bdf8, 5, 0.4);
+            scene.remove(tb.mesh);
+            turretBullets.splice(i, 1);
+            if (z.hp <= 0) defeatZombie(z, j);
+            hit = true;
+            break;
+          }
+        }
+        if (hit) continue;
+
+        if (tb.life <= 0) {
+          scene.remove(tb.mesh);
+          turretBullets.splice(i, 1);
+        }
+      }
+
+      // Enemies AI (Target Player, Base Core, or BITE ALLIES!)
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const z = enemies[i];
+
+        let targetPos = baseCoreGroup.position;
+        let targetType = 'base';
+        let targetAlly = null;
+        let targetAllyIdx = -1;
+        let minD = z.mesh.position.distanceTo(baseCoreGroup.position);
+
+        // Check if player is closer
+        const dPlayer = z.mesh.position.distanceTo(player.position);
+        if (dPlayer < 12 || dPlayer < minD) {
+          targetPos = player.position;
+          targetType = 'player';
+          minD = dPlayer;
+        }
+
+        // Zombies prioritize biting allies to re-infect them!
+        for (let aIdx = 0; aIdx < allies.length; aIdx++) {
+          const a = allies[aIdx];
+          const dAlly = z.mesh.position.distanceTo(a.mesh.position);
+          if (dAlly < 14 && dAlly < minD) {
+            targetPos = a.mesh.position;
+            targetType = 'ally';
+            targetAlly = a;
+            targetAllyIdx = aIdx;
+            minD = dAlly;
+          }
+        }
+
+        const toTarget = targetPos.clone().sub(z.mesh.position);
+        toTarget.y = 0;
+        z.mesh.rotation.y = Math.atan2(toTarget.x, toTarget.z);
+
+        if (minD > 1.6) {
+          toTarget.normalize();
+          z.mesh.position.addScaledVector(toTarget, z.speed * delta);
+          z.walkAnim += delta * 6;
+          const swing = Math.sin(z.walkAnim) * 0.45;
+          if (z.mesh.legL) z.mesh.legL.rotation.x = swing;
+          if (z.mesh.legR) z.mesh.legR.rotation.x = -swing;
+        } else {
+          // Attack Target
+          z.attackCooldown -= delta;
+          if (z.attackCooldown <= 0) {
+            z.attackCooldown = 1.0;
+            const dmg = z.type === 'tank' ? 24 : 14;
+
+            if (targetType === 'player') {
+              playerStats.hp = Math.max(0, playerStats.hp - dmg);
+              sound.playInfection();
+              showFloatingCombatText(player.position, `피격 -${dmg}`, '#ef4444');
+              if (playerStats.hp <= 0) {
+                triggerGameOver('플레이어 전투복이 파괴되었습니다.');
+              }
+            } else if (targetType === 'base') {
+              baseHp = Math.max(0, baseHp - dmg);
+              sound.playExplosion();
+              showFloatingCombatText(baseCoreGroup.position.clone().add(new THREE.Vector3(0, 3, 0)), `코어 피격 -${dmg}`, '#ef4444');
+              if (baseHp <= 0) {
+                triggerGameOver('기지 중앙 코어가 완전히 파괴되었습니다.');
+              }
+            } else if (targetType === 'ally' && targetAlly) {
+              targetAlly.hp -= dmg;
+              sound.playInfection();
+              showFloatingCombatText(targetAlly.mesh.position, `아군 부상 -${dmg}`, '#ef4444');
+              // RE-INFECTION IF ALLY HP ZERO
+              if (targetAlly.hp <= 0) {
+                reInfectAllyToZombie(targetAlly, targetAllyIdx);
+              }
+            }
+          }
+        }
+      }
+
+      // Update Particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.life -= delta;
+        p.velocity.y -= 25 * delta;
+        p.mesh.position.addScaledVector(p.velocity, delta);
+
+        if (p.mesh.position.y < 0.2) {
+          p.mesh.position.y = 0.2;
+          p.velocity.y *= -0.3;
+        }
+
+        if (p.life <= 0) {
+          scene.remove(p.mesh);
+          particles.splice(i, 1);
+        }
+      }
+
+      // Update Floating Pickups
+      for (let i = floatingPickups.length - 1; i >= 0; i--) {
+        const p = floatingPickups[i];
+        p.time += delta;
+        p.mesh.rotation.y += delta * 2.5;
+        p.mesh.position.y = 0.8 + Math.sin(p.time * 4) * 0.15;
+
+        if (p.mesh.position.distanceTo(player.position) < 1.8) {
+          applyPickupBuff(p.type);
+          scene.remove(p.mesh);
+          floatingPickups.splice(i, 1);
+        }
+      }
+
+      updateHUD();
+    }
+
+    function defeatZombie(z, index) {
+      sound.playExplosion();
+      spawnVoxelExplosion(z.mesh.position, 0x15803d, 18, 1.0);
+      spawnGroundDrop(z.mesh.position);
+      scene.remove(z.mesh);
+      enemies.splice(index, 1);
+
+      score += 100;
+      waveKilled++;
+      checkWaveStatus();
+      updateHUD();
+    }
+
+    /* ==========================================================================
+       UI & HUD UPDATES
+       ========================================================================== */
+    function updateHUD() {
+      // Player HP
+      const hpPct = Math.max(0, (playerStats.hp / playerStats.maxHp) * 100);
+      document.getElementById('player-hp-bar').style.width = `${hpPct}%`;
+      document.getElementById('player-hp-txt').innerText = `${Math.ceil(playerStats.hp)} / ${playerStats.maxHp}`;
+
+      // Core HP
+      const corePct = Math.max(0, (baseHp / baseMaxHp) * 100);
+      document.getElementById('core-hp-bar').style.width = `${corePct}%`;
+      document.getElementById('core-hp-txt').innerText = `${Math.ceil(baseHp)} / ${baseMaxHp}`;
+
+      // Base Progress
+      document.getElementById('base-progress-bar').style.width = `${baseProgress}%`;
+      document.getElementById('base-progress-txt').innerText = `${Math.floor(baseProgress)}%`;
+
+      // Counters
+      document.getElementById('res-val').innerText = resources;
+      document.getElementById('coin-val').innerText = coins;
+      document.getElementById('wave-val').innerText = wave;
+      document.getElementById('ally-val').innerText = allies.length;
+      document.getElementById('score-val').innerText = score;
+
+      // Dash skill
+      const dashLeft = Math.max(0, playerStats.dashTimer);
+      const dashPct = Math.min(100, ((playerStats.dashCooldown - dashLeft) / playerStats.dashCooldown) * 100);
+      document.getElementById('dash-bar').style.width = `${dashPct}%`;
+      document.getElementById('dash-txt').innerText = dashLeft <= 0 ? 'READY' : `${dashLeft.toFixed(1)}s`;
+
+      // Active Buffs container
+      const buffContainer = document.getElementById('buff-row');
+      buffContainer.innerHTML = '';
+      if (hasVaccineGun) {
+        buffContainer.innerHTML += `<span class="bg-emerald-950/80 border border-emerald-400 text-emerald-300 text-[10px] px-2 py-0.5 rounded-full font-bold">💉 백신 총 활성화</span>`;
+      }
+      if (playerStats.rapidTimer > 0) {
+        buffContainer.innerHTML += `<span class="bg-yellow-950/80 border border-yellow-400 text-yellow-300 text-[10px] px-2 py-0.5 rounded-full font-bold">⚡ 속사 (${playerStats.rapidTimer.toFixed(1)}s)</span>`;
+      }
+      if (playerStats.tripleTimer > 0) {
+        buffContainer.innerHTML += `<span class="bg-sky-950/80 border border-sky-400 text-sky-300 text-[10px] px-2 py-0.5 rounded-full font-bold">🔱 3연장 (${playerStats.tripleTimer.toFixed(1)}s)</span>`;
+      }
+      if (playerStats.speedTimer > 0) {
+        buffContainer.innerHTML += `<span class="bg-purple-950/80 border border-purple-400 text-purple-300 text-[10px] px-2 py-0.5 rounded-full font-bold">👟 가속 (${playerStats.speedTimer.toFixed(1)}s)</span>`;
+      }
+    }
+
+    /* ==========================================================================
+       KEYBOARD & MOBILE TOUCH CONTROLS
+       ========================================================================== */
+    function setupKeyboardControls() {
+      window.addEventListener('keydown', (e) => {
+        sound.init();
+        const k = e.key.toLowerCase();
+        keys[k] = true;
+        if (e.code === 'Space') { keys.Space = true; e.preventDefault(); }
+        if (k === 'b') toggleBuildModal();
+        if (k === 't') toggleShopModal();
+        if (k === '1') selectWeapon('BLASTER');
+        if (k === '2') selectWeapon('VACCINE');
+        if (k === 'r') triggerDash();
+        if (e.code === 'Enter' && gameState !== STATES.PLAYING) {
+          startGameSession();
+        }
+      });
+
+      window.addEventListener('keyup', (e) => {
+        const k = e.key.toLowerCase();
+        keys[k] = false;
+        if (e.code === 'Space') keys.Space = false;
+      });
+    }
+
+    function setupTouchControls() {
+      const joyZone = document.getElementById('joy-zone');
+      const joyKnob = document.getElementById('joy-knob');
+      let touchId = null;
+      let startX = 0, startY = 0;
+      const maxRadius = 45;
+
+      joyZone.addEventListener('touchstart', (e) => {
+        sound.init();
+        const t = e.changedTouches[0];
+        touchId = t.identifier;
+        const rect = joyZone.getBoundingClientRect();
+        startX = rect.left + rect.width / 2;
+        startY = rect.top + rect.height / 2;
+        updateKnob(t.clientX, t.clientY);
+        e.preventDefault();
+      }, { passive: false });
+
+      window.addEventListener('touchmove', (e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          const t = e.changedTouches[i];
+          if (t.identifier === touchId) {
+            updateKnob(t.clientX, t.clientY);
+            e.preventDefault();
+            break;
+          }
+        }
+      }, { passive: false });
+
+      const endJoy = (e) => {
+        for (let i = 0; i < e.changedTouches.length; i++) {
+          if (e.changedTouches[i].identifier === touchId) {
+            touchId = null;
+            joyKnob.style.transform = 'translate(0px, 0px)';
+            touch.moveX = 0;
+            touch.moveZ = 0;
+            e.preventDefault();
+            break;
+          }
+        }
+      };
+      window.addEventListener('touchend', endJoy, { passive: false });
+      window.addEventListener('touchcancel', endJoy, { passive: false });
+
+      function updateKnob(cx, cy) {
+        let dx = cx - startX;
+        let dy = cy - startY;
+        const dist = Math.hypot(dx, dy);
+        if (dist > maxRadius) {
+          dx = (dx / dist) * maxRadius;
+          dy = (dy / dist) * maxRadius;
+        }
+        joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+        touch.moveX = dx / maxRadius;
+        touch.moveZ = -dy / maxRadius;
+      }
+
+      // Action Buttons
+      const btnFire = document.getElementById('btn-touch-fire');
+      btnFire.addEventListener('touchstart', (e) => { sound.init(); touch.firing = true; e.preventDefault(); });
+      btnFire.addEventListener('touchend', (e) => { touch.firing = false; e.preventDefault(); });
+
+      document.getElementById('btn-touch-dash').addEventListener('touchstart', (e) => { sound.init(); triggerDash(); e.preventDefault(); });
+      document.getElementById('btn-touch-build').addEventListener('touchstart', (e) => { sound.init(); toggleBuildModal(); e.preventDefault(); });
+      document.getElementById('btn-touch-shop').addEventListener('touchstart', (e) => { sound.init(); toggleShopModal(); e.preventDefault(); });
+
+      document.getElementById('btn-touch-swap').addEventListener('touchstart', (e) => {
+        sound.init();
+        if (hasVaccineGun) {
+          selectWeapon(currentWeapon === 'BLASTER' ? 'VACCINE' : 'BLASTER');
+        } else {
+          toggleShopModal();
+        }
+        e.preventDefault();
+      });
+
+      const btnTurnL = document.getElementById('btn-turn-l');
+      btnTurnL.addEventListener('touchstart', (e) => { touch.turnLeft = true; e.preventDefault(); });
+      btnTurnL.addEventListener('touchend', (e) => { touch.turnLeft = false; e.preventDefault(); });
+
+      const btnTurnR = document.getElementById('btn-turn-r');
+      btnTurnR.addEventListener('touchstart', (e) => { touch.turnRight = true; e.preventDefault(); });
+      btnTurnR.addEventListener('touchend', (e) => { touch.turnRight = false; e.preventDefault(); });
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    /* ==========================================================================
+       SESSION MANAGEMENT & CHEAT PROTOCOLS
+       ========================================================================== */
+    function startGameSession() {
+      sound.init();
+      const codeInput = document.getElementById('secret-code').value.trim();
+
+      // Secret protocol cheats
+      if (codeInput === '#비밀기지' || codeInput.includes('기지')) {
+        constructStructure('turret');
+        constructStructure('beacon');
+        showFloatingCombatText(player.position, '🎁 특수 작전 코드: 방어 시설 지원 배치!', '#38bdf8');
+      } else if (codeInput === '7777' || codeInput.includes('자원')) {
+        resources += 60;
+        coins += 60;
+        baseProgress = 25;
+        showFloatingCombatText(player.position, '🪙 특수 작전 코드: 대량 보급품 수령!', '#facc15');
+      } else if (codeInput === '9999' || codeInput.includes('무적')) {
+        playerStats.maxHp = 999;
+        playerStats.hp = 999;
+        playerStats.speedTimer = 999;
+        showFloatingCombatText(player.position, '⚡ 특수 작전 코드: 오버클럭 전투 모드!', '#10b981');
+      }
+
+      document.getElementById('start-screen').classList.add('hidden');
+      gameState = STATES.PLAYING;
+      sound.playLaser();
+      selectWeapon('VACCINE');
+      updateHUD();
+    }
+
+    function resetAndRestart() {
+      document.getElementById('gameover-screen').classList.add('hidden');
+      document.getElementById('victory-screen').classList.add('hidden');
+
+      // Clear dynamic objects
+      [bullets, turretBullets, allyBullets, enemies, allies, structures, floatingPickups].forEach(arr => {
+        arr.forEach(item => {
+          if (item.mesh) scene.remove(item.mesh);
+          else if (item.group) scene.remove(item.group);
+        });
+        arr.length = 0;
+      });
+
+      player.position.set(0, 0, 8);
+      player.rotation.set(0, 0, 0);
+
+      playerStats.hp = playerStats.maxHp;
+      baseHp = baseMaxHp;
+      baseProgress = 0;
+      score = 0;
+      resources = 15;
+      coins = 20;
+      wave = 1;
+      waveTotal = 12;
+      waveSpawned = 0;
+      waveKilled = 0;
+      hasVaccineGun = true;
+      selectWeapon('VACCINE');
+
+      document.getElementById('btn-buy-vaccine').innerText = '보유중 (1/2 전환)';
+      document.getElementById('btn-buy-vaccine').disabled = true;
+
+      gameState = STATES.PLAYING;
+      updateHUD();
+    }
+
+    // Start Everything on Load
+    window.onload = function() {
+      initThree();
+      selectWeapon('VACCINE');
+      const vaccineShopBtn = document.getElementById('btn-buy-vaccine');
+      if (vaccineShopBtn) {
+        vaccineShopBtn.innerText = '보유중 (1/2 전환)';
+        vaccineShopBtn.disabled = true;
+      }
+      animateLoop();
+    };
+
+    function animateLoop(time) {
+      gameLoop(time || 0);
+    }
+  </script>
+</body>
+</html>
